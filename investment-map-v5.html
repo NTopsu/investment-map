@@ -1,93 +1,585 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Investment Map Application</title>
+    <title>Investointikartta - Excel Import</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
     <style>
-        /* Map container styling */
-        #map {
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            display: flex;
             height: 100vh;
-            width: 100%;
+            flex-direction: column;
         }
-    </style>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
-</head>
-<body>
-    <div id="map"></div>
-    <script>
-        // Sample project data
-        const projects = [
-            { name: 'Project A', phase: 'Keskeytetty', lat: 60.1695, lon: 24.9354, capacity: 100 },
-            { name: 'Project B', phase: 'Esiselvitys', lat: 60.1695, lon: 24.9354, capacity: 50 },
-            { name: 'Project C', phase: 'Suunnittelu', lat: 60.1715, lon: 24.9354, capacity: 200 },
-            { name: 'Project D', phase: 'Investointipäätös', lat: 60.1725, lon: 24.9374, capacity: 150 },
-            { name: 'Project E', phase: 'Käynnistys', lat: 60.1735, lon: 24.9384, capacity: 75 }
-        ];
-
-        const phaseColors = {
-            'Keskeytetty': 'gray',
-            'Esiselvitys': 'orange',
-            'Suunnittelu': 'yellow',
-            'Investointipäätös': 'darkgreen',
-            'Käynnistys': 'lightgreen'
-        };
-
-        const map = L.map('map').setView([60.1695, 24.9354], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-
-        function addMarker(project) {
-            let color = phaseColors[project.phase];
-            let markerSize = project.capacity / 10; // Adjust size scale as needed
-
-            // Create the marker with a circle
-            L.circleMarker([project.lat, project.lon], {
-                radius: markerSize,
-                fillColor: color,
-                color: color,
-                fillOpacity: 0.7,
-                stroke: true,
-                weight: 1.5
-            }).addTo(map)
-                .bindPopup(project.name + ' - Phase: ' + project.phase + '\nCapacity: ' + project.capacity);
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-
-        // Group projects by location for pie-chart markers
-        const projectGroups = {};
-        projects.forEach(project => {
-            const key = project.lat + '-' + project.lon;
-            if (!projectGroups[key]) projectGroups[key] = [];
-            projectGroups[key].push(project);
-        });
-
-        // Add markers for all projects
-        for (const key in projectGroups) {
-            const group = projectGroups[key];
-            if (group.length > 1) {
-                // Pie-chart style marker for multiple projects
-                let pieChartData = group.map(p => ({ label: p.phase, value: p.capacity }));
-                let totalCapacity = group.reduce((acc, p) => acc + p.capacity, 0);
-                let pieColors = group.map(p => phaseColors[p.phase]);
-
-                L.circleMarker([group[0].lat, group[0].lon], {
-                    radius: 10, // Fixed size for pie-chart marker
-                    fillColor: 'white',
-                    color: 'black',
-                    fillOpacity: 0.5
-                }).addTo(map)
-                    .bindPopup(`Estimated Total Capacity: ${totalCapacity}\nProjects: ${group.length}`);
-            } else {
-                // Single project marker
-                addMarker(group[0]);
+        
+        .header h1 {
+            font-size: 28px;
+        }
+        
+        .upload-btn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .content {
+            display: flex;
+            flex: 1;
+            gap: 20px;
+            padding: 20px;
+            overflow: hidden;
+        }
+        
+        #map {
+            flex: 1;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1;
+        }
+        
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            overflow-y: auto;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            font-size: 11px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        
+        .stat-card .value {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .phase-legend {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .phase-legend h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .phase-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        
+        .phase-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .projects-section h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .project-item {
+            background: #f9f9f9;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 4px solid #667eea;
+            font-size: 12px;
+        }
+        
+        .project-item:hover {
+            background: #efefef;
+            transform: translateX(5px);
+        }
+        
+        .project-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .project-info {
+            color: #666;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        
+        @media (max-width: 768px) {
+            .content {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                max-height: 300px;
             }
         }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>🇫🇮 Investointikartta</h1>
+                <p style="font-size: 14px; opacity: 0.9;">Lataa Excel-tiedosto ja visualisoi investoinnit kartalla</p>
+            </div>
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                📤 Lataa Excel-tiedosto
+            </button>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" />
+        </div>
+        
+        <div class="content">
+            <div id="map"></div>
+            <div class="sidebar">
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Kokonaisinvestoinnit</h3>
+                        <div class="value" id="totalInvestment">0</div>
+                        <div style="font-size: 10px;">M€</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Hankkeet</h3>
+                        <div class="value" id="totalProjects">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Valmistumisprosentti</h3>
+                        <div class="value" id="completionRate">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Kapasiteetti</h3>
+                        <div class="value" id="totalCapacity">0</div>
+                        <div style="font-size: 10px;">MW</div>
+                    </div>
+                </div>
+                
+                <div class="phase-legend">
+                    <h3>📍 Vaiheet</h3>
+                    <div class="phase-item">
+                        <div class="phase-color" style="background: #808080;"></div>
+                        <span>Keskeytetty</span>
+                    </div>
+                    <div class="phase-item">
+                        <div class="phase-color" style="background: #ff8c00;"></div>
+                        <span>Esiselvitys</span>
+                    </div>
+                    <div class="phase-item">
+                        <div class="phase-color" style="background: #ffff00; border: 1px solid #999;"></div>
+                        <span>Suunnittelu</span>
+                    </div>
+                    <div class="phase-item">
+                        <div class="phase-color" style="background: #228B22;"></div>
+                        <span>Investointipäätös</span>
+                    </div>
+                    <div class="phase-item">
+                        <div class="phase-color" style="background: #90EE90;"></div>
+                        <span>Käynnistys</span>
+                    </div>
+                </div>
+                
+                <div class="projects-section">
+                    <h2>Hankkeet</h2>
+                    <div id="projectsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        // Initialize all markers
-        group.forEach(project => addMarker(project));
+    <script>
+        const cityCoordinates = {
+            'Akaa': { lat: 61.0667, lng: 23.8333 },
+            'Alajärvi': { lat: 62.6167, lng: 23.5833 },
+            'Alavus': { lat: 62.5833, lng: 23.5833 },
+            'Asikkala': { lat: 60.9667, lng: 25.8667 },
+            'Askola': { lat: 60.4667, lng: 25.6167 },
+            'Aura': { lat: 60.6167, lng: 22.0167 },
+            'Espoo': { lat: 60.2055, lng: 24.6559 },
+            'Eurajoki': { lat: 61.0917, lng: 21.4197 },
+            'Forssa': { lat: 60.8116, lng: 23.6242 },
+            'Haapajärvi': { lat: 63.75, lng: 25.3167 },
+            'Haapavesi': { lat: 63.8333, lng: 25.3333 },
+            'Hamina': { lat: 60.5683, lng: 27.1985 },
+            'Hanko': { lat: 59.8333, lng: 22.6667 },
+            'Hämeenlinna': { lat: 60.9956, lng: 24.7614 },
+            'Heinola': { lat: 61.1967, lng: 26.0308 },
+            'Helsinki': { lat: 60.1695, lng: 24.9354 },
+            'Hirvensalmi': { lat: 61.5667, lng: 27.15 },
+            'Hollola': { lat: 60.9333, lng: 25.8333 },
+            'Huittinen': { lat: 61.1833, lng: 22.6333 },
+            'Humppila': { lat: 60.65, lng: 23.1667 },
+            'Ii': { lat: 64.9833, lng: 27.2833 },
+            'Iisalmi': { lat: 63.5667, lng: 27.1833 },
+            'Ilmajoki': { lat: 62.7167, lng: 22.5667 },
+            'Ilomantsi': { lat: 62.75, lng: 29.8333 },
+            'Imatra': { lat: 61.1667, lng: 28.8 },
+            'Inari': { lat: 68.4167, lng: 27.0333 },
+            'Inkoo': { lat: 60.0167, lng: 24.0667 },
+            'Isojoki': { lat: 61.9167, lng: 21.4167 },
+            'Isokyrö': { lat: 62.3167, lng: 22.8167 },
+            'Järvenpää': { lat: 60.4667, lng: 25.1167 },
+            'Joutsa': { lat: 61.8333, lng: 25.6667 },
+            'Juankoski': { lat: 63.0667, lng: 27.6667 },
+            'Juva': { lat: 61.8333, lng: 27.7667 },
+            'Jyväskylä': { lat: 62.2411, lng: 25.7482 },
+            'Kaavi': { lat: 63.3333, lng: 27.3333 },
+            'Kajaani': { lat: 64.2258, lng: 27.7306 },
+            'Kalajoki': { lat: 64.2667, lng: 23.6667 },
+            'Kalvola': { lat: 60.6667, lng: 24.65 },
+            'Kangasala': { lat: 61.4333, lng: 24.8333 },
+            'Kangasniemi': { lat: 61.9667, lng: 26.7667 },
+            'Kankaanpää': { lat: 61.7928, lng: 21.9019 },
+            'Kannelmäki': { lat: 60.25, lng: 24.9 },
+            'Kannus': { lat: 63.9333, lng: 24.0333 },
+            'Karijoki': { lat: 62.2333, lng: 21.2667 },
+            'Karstula': { lat: 62.3333, lng: 25.6667 },
+            'Karvia': { lat: 61.6333, lng: 22.3667 },
+            'Kaskinen': { lat: 62.3667, lng: 21.2333 },
+            'Kauhajoki': { lat: 62.3667, lng: 22.15 },
+            'Kauhava': { lat: 62.5167, lng: 22.95 },
+            'Kauniainen': { lat: 60.2333, lng: 24.75 },
+            'Kaustinen': { lat: 63.8167, lng: 23.8667 },
+            'Keitele': { lat: 62.8333, lng: 26.3333 },
+            'Kemi': { lat: 65.67, lng: 24.5667 },
+            'Kemijärvi': { lat: 65.7667, lng: 27.4333 },
+            'Keminmaa': { lat: 65.6917, lng: 24.55 },
+            'Kerava': { lat: 60.4042, lng: 25.1167 },
+            'Kerkola': { lat: 60.4333, lng: 25.35 },
+            'Keuruu': { lat: 62.2942, lng: 25.3025 },
+            'Keuru': { lat: 62.3, lng: 25.3 },
+            'Kiikoinen': { lat: 61.2667, lng: 23.0833 },
+            'Kiikka': { lat: 61.2333, lng: 22.3667 },
+            'Kiilto': { lat: 60.5833, lng: 23.7167 },
+            'Kiiminkii': { lat: 64.3667, lng: 27.6833 },
+            'Kiljava': { lat: 60.4167, lng: 25.1667 },
+            'Kilpilahti': { lat: 60.35, lng: 25.5167 },
+            'Kimito': { lat: 60.2667, lng: 21.6167 },
+            'Kinnula': { lat: 63.7167, lng: 25.1833 },
+            'Kinttula': { lat: 64.1667, lng: 27.7833 },
+            'Kirkkonummi': { lat: 60.3667, lng: 24.4333 },
+            'Kirola': { lat: 60.9333, lng: 25.75 },
+            'Kisko': { lat: 60.3667, lng: 22.5333 },
+            'Kitee': { lat: 62.0942, lng: 29.1892 },
+            'Kiuruvesi': { lat: 63.4667, lng: 26.6333 },
+            'Kivijärvi': { lat: 63.1667, lng: 25.2333 },
+            'Klaukkala': { lat: 60.3833, lng: 24.7167 },
+            'Kokemäki': { lat: 61.3711, lng: 22.1894 },
+            'Kokkola': { lat: 63.8367, lng: 23.1333 },
+            'Kolari': { lat: 67.3667, lng: 23.8167 },
+            'Kouvola': { lat: 60.8831, lng: 26.7045 },
+            'Kristiinankaupunki': { lat: 62.2681, lng: 21.4294 },
+            'Kuhmo': { lat: 63.985, lng: 28.9547 },
+            'Kuopio': { lat: 62.8921, lng: 27.6767 },
+            'Kuortane': { lat: 62.5667, lng: 22.95 },
+            'Lappeenranta': { lat: 61.0597, lng: 28.1885 },
+            'Lahti': { lat: 60.9827, lng: 25.6614 },
+            'Liminka': { lat: 64.4397, lng: 26.4656 },
+            'Loimaa': { lat: 60.8333, lng: 23.1667 },
+            'Lohja': { lat: 60.2833, lng: 23.9833 },
+            'Loviisa': { lat: 60.4533, lng: 26.3917 },
+            'Mikkeli': { lat: 61.4158, lng: 27.2733 },
+            'Mäntsälä': { lat: 60.6358, lng: 25.4217 },
+            'Nokia': { lat: 61.4928, lng: 23.4886 },
+            'Nurmijärvi': { lat: 60.5167, lng: 24.8667 },
+            'Orimattila': { lat: 60.6167, lng: 25.6833 },
+            'Oulu': { lat: 64.2008, lng: 27.7261 },
+            'Outokumpu': { lat: 62.7176, lng: 29.0094 },
+            'Paimio': { lat: 60.3833, lng: 21.7833 },
+            'Pori': { lat: 61.5061, lng: 21.7897 },
+            'Pyhäjoki': { lat: 64.3956, lng: 24.1142 },
+            'Pyhäjärvi': { lat: 63.6292, lng: 25.5456 },
+            'Raisio': { lat: 60.5228, lng: 21.7661 },
+            'Rauma': { lat: 61.1267, lng: 21.4983 },
+            'Rovaniemi': { lat: 66.5039, lng: 25.7482 },
+            'Saarijärvi': { lat: 62.4833, lng: 24.9833 },
+            'Salo': { lat: 60.3833, lng: 23.1167 },
+            'Seinäjoki': { lat: 62.7843, lng: 22.8467 },
+            'Sipoo': { lat: 60.3667, lng: 25.3333 },
+            'Tampere': { lat: 61.4991, lng: 23.7871 },
+            'Turku': { lat: 60.4518, lng: 22.2666 },
+            'Tuusula': { lat: 60.4042, lng: 25.2167 },
+            'Utajärvi': { lat: 63.85, lng: 25.9333 },
+            'Vaala': { lat: 63.4833, lng: 26.3 },
+            'Vaasa': { lat: 63.0961, lng: 21.5938 },
+            'Valkeakoski': { lat: 60.9667, lng: 24.0833 },
+            'Vantaa': { lat: 60.2969, lng: 25.0449 },
+            'Varkaus': { lat: 62.5908, lng: 27.8717 },
+            'Vihti': { lat: 60.3882, lng: 24.4891 },
+            'Pieksämäki': { lat: 62.3131, lng: 26.9614 }
+        };
+
+        const phaseColors = {
+            'Keskeytetty': '#808080',
+            'Esiselvitys': '#ff8c00',
+            'Suunnittelu': '#ffff00',
+            'Investointipäätös': '#228B22',
+            'Käynnistys': '#90EE90'
+        };
+
+        let allProjects = [];
+        let markersGroup = L.featureGroup();
+        let locationGroups = {};
+        
+        const map = L.map('map').setView([63.5, 26], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        function getPhaseColor(vaihe) {
+            return phaseColors[vaihe] || '#95a5a6';
+        }
+
+        function createMultiColorMarker(lat, lng, groups) {
+            const colors = groups.map(g => getPhaseColor(g.phase));
+            const count = groups.length;
+            const totalCapacity = groups.reduce((sum, g) => sum + (parseFloat(g['Kapasiteetti (MW)']) || 0), 0);
+            
+            // Create canvas for pie chart
+            const canvas = document.createElement('canvas');
+            canvas.width = 60;
+            canvas.height = 60;
+            const ctx = canvas.getContext('2d');
+            
+            const radius = 25;
+            let currentAngle = 0;
+            
+            colors.forEach((color, index) => {
+                const sliceAngle = (Math.PI * 2) / colors.length;
+                
+                ctx.beginPath();
+                ctx.arc(30, 30, radius, currentAngle, currentAngle + sliceAngle);
+                ctx.lineTo(30, 30);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                currentAngle += sliceAngle;
+            });
+            
+            // Add count in center
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(count, 30, 30);
+            
+            const icon = L.icon({
+                iconUrl: canvas.toDataURL(),
+                iconSize: [50, 50],
+                iconAnchor: [25, 25],
+                popupAnchor: [0, -25]
+            });
+            
+            const marker = L.marker([lat, lng], { icon: icon });
+            const popupText = groups.map(g => `${g.Paikka} (${g.Vaihe}): ${g['Kapasiteetti (MW)']} MW`).join('<br>');
+            marker.bindPopup(`<div style="font-size: 12px;">${popupText}</div>`);
+            
+            markersGroup.addLayer(marker);
+        }
+
+        function createSingleMarker(project, capacity) {
+            const radius = Math.max(8, Math.min(30, capacity / 5));
+            const color = getPhaseColor(project.Vaihe);
+            
+            const circle = L.circleMarker([project.lat, project.lng], {
+                radius: radius,
+                fillColor: color,
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            });
+
+            const popupContent = `
+                <div style="font-size: 12px; max-width: 250px;">
+                    <h3>${project.Paikka}</h3>
+                    <div><strong>Vaihe:</strong> ${project.Vaihe}</div>
+                    <div><strong>Teema:</strong> ${project.Teema}</div>
+                    <div><strong>Summa:</strong> ${project['Summa (M€)'] || 0} M€</div>
+                    <div><strong>Kapasiteetti:</strong> ${project['Kapasiteetti (MW)'] || 0} MW</div>
+                    <div><strong>Valmistuminen:</strong> ${project.Valmistuminen || 'N/A'}</div>
+                    ${project.Linkki ? `<div><a href="${project.Linkki}" target="_blank">Lisätiedot</a></div>` : ''}
+                </div>
+            `;
+            circle.bindPopup(popupContent);
+            markersGroup.addLayer(circle);
+        }
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                    allProjects = [];
+                    markersGroup.clearLayers();
+                    locationGroups = {};
+
+                    jsonData.forEach(project => {
+                        const coords = cityCoordinates[project.Paikka];
+                        if (coords) {
+                            const projectData = {
+                                ...project,
+                                lat: coords.lat,
+                                lng: coords.lng
+                            };
+                            allProjects.push(projectData);
+
+                            const key = coords.lat + '-' + coords.lng;
+                            if (!locationGroups[key]) {
+                                locationGroups[key] = { coords, projects: [] };
+                            }
+                            locationGroups[key].projects.push(projectData);
+                        }
+                    });
+
+                    // Create markers
+                    for (const key in locationGroups) {
+                        const group = locationGroups[key];
+                        if (group.projects.length > 1) {
+                            createMultiColorMarker(group.coords.lat, group.coords.lng, group.projects);
+                        } else {
+                            const capacity = parseFloat(group.projects[0]['Kapasiteetti (MW)']) || 0;
+                            createSingleMarker(group.projects[0], capacity);
+                        }
+                    }
+
+                    map.addLayer(markersGroup);
+                    updateStats();
+                    updateProjectsList();
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Virhe tiedoston käsittelyssä: ' + error.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function updateStats() {
+            const totalInvestment = allProjects.reduce((sum, p) => sum + (parseFloat(p['Summa (M€)']) || 0), 0);
+            const totalCapacity = allProjects.reduce((sum, p) => sum + (parseFloat(p['Kapasiteetti (MW)']) || 0), 0);
+            
+            const phaseStats = {};
+            allProjects.forEach(p => {
+                phaseStats[p.Vaihe] = (phaseStats[p.Vaihe] || 0) + 1;
+            });
+            
+            let avgCompletion = 0;
+            const phaseValues = {
+                'Keskeytetty': 0,
+                'Esiselvitys': 25,
+                'Suunnittelu': 50,
+                'Investointipäätös': 75,
+                'Käynnistys': 100
+            };
+            allProjects.forEach(p => {
+                avgCompletion += phaseValues[p.Vaihe] || 0;
+            });
+            avgCompletion = allProjects.length > 0 ? avgCompletion / allProjects.length : 0;
+
+            document.getElementById('totalInvestment').textContent = totalInvestment.toFixed(0);
+            document.getElementById('totalProjects').textContent = allProjects.length;
+            document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(0);
+            document.getElementById('completionRate').textContent = Math.round(avgCompletion) + '%';
+        }
+
+        function updateProjectsList() {
+            const projectsList = document.getElementById('projectsList');
+            projectsList.innerHTML = '';
+
+            allProjects.sort((a, b) => (parseFloat(b['Summa (M€)']) || 0) - (parseFloat(a['Summa (M€)']) || 0));
+
+            allProjects.forEach(project => {
+                const projectItem = document.createElement('div');
+                projectItem.className = 'project-item';
+                projectItem.style.borderLeftColor = getPhaseColor(project.Vaihe);
+                projectItem.innerHTML = `
+                    <div class="project-title">${project.Paikka}</div>
+                    <div class="project-info">
+                        <div>📌 ${project.Teema}</div>
+                        <div>💰 ${project['Summa (M€)'] || 0} M€</div>
+                        <div>⚡ ${project['Kapasiteetti (MW)'] || 0} MW</div>
+                        <div>📊 ${project.Vaihe}</div>
+                    </div>
+                `;
+                projectsList.appendChild(projectItem);
+            });
+        }
     </script>
 </body>
 </html>
