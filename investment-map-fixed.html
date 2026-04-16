@@ -502,7 +502,12 @@
                     console.log('Excel-data ladattu:', jsonData);
 
                     allProjects = [];
-                    markersGroup.clearLayers();
+                   // Poista vanhat markit kartalta
+if (map.hasLayer(markersGroup)) {
+    map.removeLayer(markersGroup);
+}
+markersGroup = L.featureGroup();
+markersGroup.clearLayers();
                     locationGroups = {};
 
                     // Tyhjennä vaiheittaiset tilastot
@@ -519,7 +524,11 @@ document.getElementById('totalProjects').textContent = '0';
 document.getElementById('totalCapacity').textContent = '0';
 document.getElementById('completionRate').textContent = '0%';
 document.getElementById('projectsList').innerHTML = '';
-
+// Tyhjennä myös sidebar-projektilista
+const projectsList = document.getElementById('projectsList');
+if (projectsList) {
+    projectsList.innerHTML = '';
+}
                     jsonData.forEach(project => {
                         const coords = cityCoordinates[project.Paikka];
                         if (coords) {
