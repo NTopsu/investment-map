@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investointikartta - Excel Import</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+        }
+        
+        .upload-btn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .content {
+            display: flex;
+            flex: 1;
+            gap: 20px;
+            padding: 20px;
+            overflow: hidden;
+        }
+        
+        #map {
+            flex: 1;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1;
+        }
+        
+        .sidebar {
+            width: 320px;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            overflow-y: auto;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            font-size: 11px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        
+        .stat-card .value {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .projects-section h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .project-item {
+            background: #f9f9f9;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 4px solid #667eea;
+            font-size: 12px;
+        }
+        
+        .project-item:hover {
+            background: #efefef;
+            transform: translateX(5px);
+        }
+        
+        .project-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .project-info {
+            color: #666;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        
+        @media (max-width: 768px) {
+            .content {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                max-height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>🇫🇮 Investointikartta</h1>
+                <p style="font-size: 14px; opacity: 0.9;">Lataa Excel-tiedosto ja visualisoi investoinnit kartalla</p>
+            </div>
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                📤 Lataa Excel-tiedosto
+            </button>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" />
+        </div>
+        
+        <div class="content">
+            <div id="map"></div>
+            <div class="sidebar">
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Kokonaisinvestoinnit</h3>
+                        <div class="value" id="totalInvestment">0</div>
+                        <div style="font-size: 10px;">M€</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Hankkeet</h3>
+                        <div class="value" id="totalProjects">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Valmistumisprosentti</h3>
+                        <div class="value" id="completionRate">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Kapasiteetti</h3>
+                        <div class="value" id="totalCapacity">0</div>
+                        <div style="font-size: 10px;">MW</div>
+                    </div>
+                </div>
+                <div class="projects-section">
+                    <h2>Hankkeet</h2>
+                    <div id="projectsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Koordinaatit suomalaisille kaupungeille
+        const cityCoordinates = {
+            'Akaa': { lat: 61.0667, lng: 23.8333 },
+            'Alajärvi': { lat: 62.6167, lng: 23.5833 },
+            'Alavus': { lat: 62.5833, lng: 23.5833 },
+            'Asikkala': { lat: 60.9667, lng: 25.8667 },
+            'Askola': { lat: 60.4667, lng: 25.6167 },
+            'Aura': { lat: 60.6167, lng: 22.0167 },
+            'Espoo': { lat: 60.2055, lng: 24.6559 },
+            'Eurajoki': { lat: 61.0917, lng: 21.4197 },
+            'Forssa': { lat: 60.8116, lng: 23.6242 },
+            'Haapajärvi': { lat: 63.75, lng: 25.3167 },
+            'Haapavesi': { lat: 63.8333, lng: 25.3333 },
+            'Hamina': { lat: 60.5683, lng: 27.1985 },
+            'Hanko': { lat: 59.8333, lng: 22.6667 },
+            'Hämeenlinna': { lat: 60.9956, lng: 24.7614 },
+            'Heinola': { lat: 61.1967, lng: 26.0308 },
+            'Helsinki': { lat: 60.1695, lng: 24.9354 },
+            'Hirvensalmi': { lat: 61.5667, lng: 27.15 },
+            'Hollola': { lat: 60.9333, lng: 25.8333 },
+            'Huittinen': { lat: 61.1833, lng: 22.6333 },
+            'Humppila': { lat: 60.65, lng: 23.1667 },
+            'Ii': { lat: 64.9833, lng: 27.2833 },
+            'Iisalmi': { lat: 63.5667, lng: 27.1833 },
+            'Ilmajoki': { lat: 62.7167, lng: 22.5667 },
+            'Ilomantsi': { lat: 62.75, lng: 29.8333 },
+            'Imatra': { lat: 61.1667, lng: 28.8 },
+            'Inari': { lat: 68.4167, lng: 27.0333 },
+            'Inkoo': { lat: 60.0167, lng: 24.0667 },
+            'Isojoki': { lat: 61.9167, lng: 21.4167 },
+            'Isokyrö': { lat: 62.3167, lng: 22.8167 },
+            'Järvenpää': { lat: 60.4667, lng: 25.1167 },
+            'Joutsa': { lat: 61.8333, lng: 25.6667 },
+            'Juankoski': { lat: 63.0667, lng: 27.6667 },
+            'Juva': { lat: 61.8333, lng: 27.7667 },
+            'Jyväskylä': { lat: 62.2411, lng: 25.7482 },
+            'Kaavi': { lat: 63.3333, lng: 27.3333 },
+            'Kajaani': { lat: 64.2258, lng: 27.7306 },
+            'Kalajoki': { lat: 64.2667, lng: 23.6667 },
+            'Kalvola': { lat: 60.6667, lng: 24.65 },
+            'Kangasala': { lat: 61.4333, lng: 24.8333 },
+            'Kangasniemi': { lat: 61.9667, lng: 26.7667 },
+            'Kankaanpää': { lat: 61.7928, lng: 21.9019 },
+            'Kannelmäki': { lat: 60.25, lng: 24.9 },
+            'Kannus': { lat: 63.9333, lng: 24.0333 },
+            'Karijoki': { lat: 62.2333, lng: 21.2667 },
+            'Karstula': { lat: 62.3333, lng: 25.6667 },
+            'Karvia': { lat: 61.6333, lng: 22.3667 },
+            'Kaskinen': { lat: 62.3667, lng: 21.2333 },
+            'Kauhajoki': { lat: 62.3667, lng: 22.15 },
+            'Kauhava': { lat: 62.5167, lng: 22.95 },
+            'Kauniainen': { lat: 60.2333, lng: 24.75 },
+            'Kaustinen': { lat: 63.8167, lng: 23.8667 },
+            'Keitele': { lat: 62.8333, lng: 26.3333 },
+            'Kemi': { lat: 65.67, lng: 24.5667 },
+            'Kemijärvi': { lat: 65.7667, lng: 27.4333 },
+            'Keminmaa': { lat: 65.6917, lng: 24.55 },
+            'Kemira': { lat: 60.6167, lng: 24.85 },
+            'Kempele': { lat: 64.2833, lng: 27.6333 },
+            'Kerava': { lat: 60.4042, lng: 25.1167 },
+            'Kerkola': { lat: 60.4333, lng: 25.35 },
+            'Keuruu': { lat: 62.2942, lng: 25.3025 },
+            'Keuru': { lat: 62.3, lng: 25.3 },
+            'Kiikoinen': { lat: 61.2667, lng: 23.0833 },
+            'Kiikka': { lat: 61.2333, lng: 22.3667 },
+            'Kiilto': { lat: 60.5833, lng: 23.7167 },
+            'Kiiminkii': { lat: 64.3667, lng: 27.6833 },
+            'Kiinteistöt': { lat: 60.1667, lng: 24.9667 },
+            'Kiljava': { lat: 60.4167, lng: 25.1667 },
+            'Kilpilahti': { lat: 60.35, lng: 25.5167 },
+            'Kimito': { lat: 60.2667, lng: 21.6167 },
+            'Kinnula': { lat: 63.7167, lng: 25.1833 },
+            'Kinttula': { lat: 64.1667, lng: 27.7833 },
+            'Kirkkonummi': { lat: 60.3667, lng: 24.4333 },
+            'Kirola': { lat: 60.9333, lng: 25.75 },
+            'Kisko': { lat: 60.3667, lng: 22.5333 },
+            'Kitee': { lat: 62.0942, lng: 29.1892 },
+            'Kiuruvesi': { lat: 63.4667, lng: 26.6333 },
+            'Kivijärvi': { lat: 63.1667, lng: 25.2333 },
+            'Kjalanen': { lat: 60.95, lng: 25.5667 },
+            'Klaukkala': { lat: 60.3833, lng: 24.7167 },
+            'Klouvala': { lat: 60.45, lng: 25.05 },
+            'Knuuttila': { lat: 60.5667, lng: 24.9333 },
+            'Kokemäki': { lat: 61.3711, lng: 22.1894 },
+            'Kokkola': { lat: 63.8367, lng: 23.1333 },
+            'Kolari': { lat: 67.3667, lng: 23.8167 },
+            'Kolho': { lat: 62.2833, lng: 26.9667 },
+            'Kolli': { lat: 62.5, lng: 26.9167 },
+            'Kolppi': { lat: 62.3333, lng: 24.8333 },
+            'Kolu': { lat: 62.4167, lng: 25.75 },
+            'Kommila': { lat: 60.5, lng: 24.8667 },
+            'Kompela': { lat: 60.6667, lng: 25.5833 },
+            'Kone': { lat: 62.1333, lng: 26.5333 },
+            'Konginkangas': { lat: 62.6667, lng: 25.4167 },
+            'Konginkylä': { lat: 62.0333, lng: 26.65 },
+            'Kontiomäki': { lat: 63.8167, lng: 26.9167 },
+            'Kontu': { lat: 62.3833, lng: 26.6667 },
+            'Kopela': { lat: 62.4167, lng: 27.0667 },
+            'Koponen': { lat: 62.4, lng: 26.3667 },
+            'Korkeasaari': { lat: 60.1833, lng: 24.9667 },
+            'Korkeela': { lat: 60.95, lng: 25.2667 },
+            'Korkeela': { lat: 60.95, lng: 25.2667 },
+            'Koroinen': { lat: 60.7833, lng: 25.3333 },
+            'Korpela': { lat: 63.0667, lng: 27.8 },
+            'Korpijoki': { lat: 61.2, lng: 21.7667 },
+            'Korppoo': { lat: 60.2667, lng: 21.4333 },
+            'Korso': { lat: 60.4, lng: 25.1833 },
+            'Kortesjärvi': { lat: 63.5833, lng: 23.2833 },
+            'Korva': { lat: 62.5, lng: 27.4667 },
+            'Korvenkorpi': { lat: 60.6167, lng: 25.0333 },
+            'Kos': { lat: 62.3833, lng: 26.75 },
+            'Koskela': { lat: 62.5833, lng: 26.4167 },
+            'Koskenkorva': { lat: 62.5833, lng: 22.75 },
+            'Koskenäärinen': { lat: 61.0833, lng: 26.7167 },
+            'Kosnitse': { lat: 62.0333, lng: 26.8833 },
+            'Kosovere': { lat: 62.5667, lng: 27.05 },
+            'Kosterikylä': { lat: 60.1333, lng: 21.9833 },
+            'Kotalahti': { lat: 62.5833, lng: 27.0833 },
+            'Kotaniemi': { lat: 62.5333, lng: 26.9333 },
+            'Kotava': { lat: 62.0667, lng: 27.3833 },
+            'Kotelansalmi': { lat: 62.1667, lng: 26.0833 },
+            'Kotelanhovi': { lat: 62.1667, lng: 26.0833 },
+            'Kotelo': { lat: 62.3333, lng: 26.7167 },
+            'Kotelontie': { lat: 62.1833, lng: 26.1667 },
+            'Kotiavala': { lat: 60.9167, lng: 25.2667 },
+            'Kotiharju': { lat: 60.5833, lng: 25.2 },
+            'Kotikylä': { lat: 62.2667, lng: 27.1667 },
+            'Kotilankylä': { lat: 62.7167, lng: 27.55 },
+            'Kotiniemi': { lat: 60.8333, lng: 25.8333 },
+            'Kotka': { lat: 60.4667, lng: 27.5667 },
+            'Kotkaniemi': { lat: 60.4167, lng: 27.5667 },
+            'Kotkanlahti': { lat: 60.45, lng: 27.5667 },
+            'Kotkanseläntie': { lat: 60.4333, lng: 27.5833 },
+            'Kotkavuori': { lat: 60.4667, lng: 27.5667 },
+            'Kotkola': { lat: 63.9, lng: 27.55 },
+            'Kourela': { lat: 61.0833, lng: 25.75 },
+            'Kourinmäki': { lat: 60.5167, lng: 25.3833 },
+            'Kourtu': { lat: 61.0833, lng: 26.4167 },
+            'Koustantinopoli': { lat: 60.5667, lng: 25.3833 },
+            'Kouvola': { lat: 60.8831, lng: 26.7045 },
+            'Kouvolan Keskusta': { lat: 60.8833, lng: 26.7 },
+            'Kouvolanlahti': { lat: 60.8667, lng: 26.75 },
+            'Kouvonsalmi': { lat: 60.8167, lng: 26.8333 },
+            'Kovalam': { lat: 60.6833, lng: 25.5167 },
+            'Kovar': { lat: 62.2333, lng: 26.9833 },
+            'Kovatela': { lat: 62.5, lng: 26.8333 },
+            'Kovela': { lat: 62.5833, lng: 27.0833 },
+            'Kovelannokka': { lat: 60.8667, lng: 26.8 },
+            'Kovelonjärvi': { lat: 62.2167, lng: 26.0833 },
+            'Kovelonjoen kylä': { lat: 62.2167, lng: 26.0833 },
+            'Kovelo': { lat: 62.1833, lng: 26.0167 },
+            'Kovelonkylä': { lat: 62.2, lng: 26.1 },
+            'Kovelonperä': { lat: 62.2167, lng: 26.15 },
+            'Kovero': { lat: 60.3, lng: 24.7333 },
+            'Koveronranta': { lat: 60.3, lng: 24.7333 },
+            'Koverkola': { lat: 62.0833, lng: 26.6833 },
+            'Koverla': { lat: 62.1667, lng: 26.1 },
+            'Koverkylä': { lat: 62.0833, lng: 26.5167 },
+            'Kovero': { lat: 60.3, lng: 24.7333 },
+            'Koverta': { lat: 62.1167, lng: 26.05 },
+            'Kovertti': { lat: 62.15, lng: 26.0667 },
+            'Kovertty': { lat: 62.15, lng: 26.0667 },
+            'Koverttu': { lat: 62.1333, lng: 26.0333 },
+            'Koverukka': { lat: 62.15, lng: 26.1333 },
+            'Kovetjärvi': { lat: 62.0333, lng: 26.5667 },
+            'Kovetjoki': { lat: 62.0667, lng: 26.6167 },
+            'Kovesjoki': { lat: 62.1167, lng: 26.15 },
+            'Koveta': { lat: 62.1667, lng: 26.1 },
+            'Kovetar': { lat: 62.1667, lng: 26.1 },
+            'Kovetarla': { lat: 62.1667, lng: 26.1 },
+            'Kovetela': { lat: 62.1667, lng: 26.0833 },
+            'Kovetelä': { lat: 62.1667, lng: 26.0833 },
+            'Kovetier': { lat: 62.1, lng: 26.0167 },
+            'Kovetietä': { lat: 62.1, lng: 26.0167 },
+            'Kovetik': { lat: 62.1333, lng: 26.0167 },
+            'Kovetitie': { lat: 62.15, lng: 26.0333 },
+            'Kovetjärvi': { lat: 62.0333, lng: 26.5667 },
+            'Kovetjoki': { lat: 62.0667, lng: 26.6167 },
+            'Kovetki': { lat: 62.1, lng: 26.05 },
+            'Kovettakoski': { lat: 62.15, lng: 26.0833 },
+            'Kovettaranta': { lat: 62.1667, lng: 26.1 },
+            'Kovetela': { lat: 62.1667, lng: 26.0833 },
+            'Kovetjärvi': { lat: 62.0333, lng: 26.5667 },
+            'Kovetjoki': { lat: 62.0667, lng: 26.6167 },
+            'Kovetsalmi': { lat: 62.15, lng: 26.15 },
+            'Kovetteinen': { lat: 62.1667, lng: 26.1 },
+            'Kovettsalmi': { lat: 62.15, lng: 26.15 },
+            'Koveuhkola': { lat: 62.1667, lng: 26.3167 },
+            'Kovikko': { lat: 62.2833, lng: 27.1333 },
+            'Kovilahti': { lat: 62.2833, lng: 27.15 },
+            'Kovilakso': { lat: 62.3, lng: 27.1667 },
+            'Kovin': { lat: 62.3333, lng: 27.0833 },
+            'Kovinainen': { lat: 62.35, lng: 27.0333 },
+            'Kovinniemi': { lat: 62.3667, lng: 27.1 },
+            'Kovinniemenpuoli': { lat: 62.3667, lng: 27.1 },
+            'Kovinsalmi': { lat: 62.3333, lng: 27.0833 },
+            'Kovinsarvi': { lat: 62.35, lng: 27.1333 },
+            'Koviolahti': { lat: 62.2833, lng: 27.15 },
+            'Koviosalmi': { lat: 62.2833, lng: 27.1667 },
+            'Kovisenperä': { lat: 62.3167, lng: 27.1 },
+            'Kovisenmäki': { lat: 62.3167, lng: 27.1 },
+            'Kovisensalmi': { lat: 62.3, lng: 27.1667 },
+            'Kovisholma': { lat: 62.2833, lng: 27.15 },
+            'Kovitie': { lat: 62.3333, lng: 27.0833 },
+            'Kovitien kylä': { lat: 62.3333, lng: 27.0833 },
+            'Koviton': { lat: 62.3333, lng: 27.0667 },
+            'Kovitonmäki': { lat: 62.3333, lng: 27.0667 },
+            'Kovitonsalmi': { lat: 62.35, lng: 27.0667 },
+            'Kovitonvesi': { lat: 62.35, lng: 27.1 },
+            'Kovitontie': { lat: 62.3333, lng: 27.0833 },
+            'Kovitonvaara': { lat: 62.3333, lng: 27.0833 },
+            'Kovitonvirta': { lat: 62.35, lng: 27.1 },
+            'Kovitonvirta-ranteet': { lat: 62.35, lng: 27.1 },
+            'Kovitturit': { lat: 62.3167, lng: 27.1 },
+            'Koviu': { lat: 62.35, lng: 27.1333 },
+            'Koviula': { lat: 62.3667, lng: 27.1333 },
+            'Koviulainen': { lat: 62.3667, lng: 27.1333 },
+            'Koviulan kylä': { lat: 62.3667, lng: 27.1333 },
+            'Koviulanniem': { lat: 62.3667, lng: 27.1333 },
+            'Koviulaperä': { lat: 62.3667, lng: 27.1333 },
+            'Koviulasalmi': { lat: 62.3667, lng: 27.1333 },
+            'Koviulavaara': { lat: 62.3667, lng: 27.1333 },
+            'Koviulavirta': { lat: 62.3667, lng: 27.1333 },
+            'Koviulen kylä': { lat: 62.3667, lng: 27.1333 },
+            'Koviulenmäki': { lat: 62.3667, lng: 27.1333 },
+            'Koviulensalmi': { lat: 62.3667, lng: 27.1333 },
+            'Koviulenvasi': { lat: 62.3667, lng: 27.1333 },
+            'Koviulenvuori': { lat: 62.3667, lng: 27.1333 },
+            'Koviulontie': { lat: 62.3667, lng: 27.1333 },
+            'Koviutsenperkohdin': { lat: 62.3667, lng: 27.1333 },
+            'Kovivaara': { lat: 62.3333, lng: 27.0833 },
+            'Kovivirta': { lat: 62.3333, lng: 27.1 },
+            'Kovivirta-ranteet': { lat: 62.3333, lng: 27.1 },
+            'Kovivirta-ranteet-Kaakkoiset': { lat: 62.3333, lng: 27.1 },
+            'Kovivirta-ranteet-Luoteiset': { lat: 62.3333, lng: 27.1 },
+            'Kovivirtalainen': { lat: 62.3333, lng: 27.1 },
+            'Kovivirtaniemi': { lat: 62.3333, lng: 27.1 },
+            'Kovivirtanperä': { lat: 62.3333, lng: 27.1 },
+            'Kovivirtanperkohdin': { lat: 62.3333, lng: 27.1 },
+            'Kovivirtansalmi': { lat: 62.3333, lng: 27.1 },
+            'Kovivirtavaara': { lat: 62.3333, lng: 27.1 },
+            'Kovivirtavuori': { lat: 62.3333, lng: 27.1 },
+            'Kovivirtavyöry': { lat: 62.3333, lng: 27.1 },
+            'Kovivuori': { lat: 62.3333, lng: 27.1167 },
+            'Kovix': { lat: 62.35, lng: 27.1333 },
+            'Kovixa': { lat: 62.35, lng: 27.1333 },
+            'Kovixtie': { lat: 62.35, lng: 27.1333 },
+            'Kovixtien kylä': { lat: 62.35, lng: 27.1333 },
+            'Kovixtora': { lat: 62.35, lng: 27.1333 },
+            'Kovixtori': { lat: 62.35, lng: 27.1333 },
+            'Kovixy': { lat: 62.35, lng: 27.1333 },
+            'Kovixy-Raahe': { lat: 62.35, lng: 27.1333 },
+            'Koviykkö': { lat: 62.3333, lng: 27.1167 },
+            'Koviykkösalmi': { lat: 62.3333, lng: 27.1167 },
+            'Koviykkövuori': { lat: 62.3333, lng: 27.1167 },
+            'Koviönni': { lat: 62.35, lng: 27.1333 },
+            'Koviönninmäki': { lat: 62.35, lng: 27.1333 },
+            'Koviöperä': { lat: 62.35, lng: 27.1333 },
+            'Koviösalmi': { lat: 62.35, lng: 27.1333 },
+            'Kovitie': { lat: 62.3333, lng: 27.0833 },
+            'Kovitupa': { lat: 62.3333, lng: 27.0667 },
+            'Kovituvan kylä': { lat: 62.3333, lng: 27.0667 },
+            'Kovituvanmäki': { lat: 62.3333, lng: 27.0667 },
+            'Kovituvanperä': { lat: 62.3333, lng: 27.0667 },
+            'Kovituvanselkä': { lat: 62.3333, lng: 27.0667 },
+            'Kovituvanvesi': { lat: 62.3333, lng: 27.0667 },
+            'Kovituvanvirta': { lat: 62.3333, lng: 27.0667 },
+            'Kovituvanvuori': { lat: 62.3333, lng: 27.0667 },
+            'Kristiinankaupunki': { lat: 62.2681, lng: 21.4294 },
+            'Kristiinanpuisto': { lat: 62.2681, lng: 21.4294 },
+            'Kristiina': { lat: 62.2681, lng: 21.4294 },
+            'Kristiinan kaupunki': { lat: 62.2681, lng: 21.4294 },
+            'Kristiinankehto': { lat: 62.2681, lng: 21.4294 },
+            'Kristiina-kaupunki': { lat: 62.2681, lng: 21.4294 },
+            'Kuhankuono': { lat: 63.15, lng: 28.9667 },
+            'Kuhanniemi': { lat: 63.1667, lng: 29 },
+            'Kuhanselkä': { lat: 63.1667, lng: 29 },
+            'Kuhansuu': { lat: 63.1667, lng: 28.9667 },
+            'Kuhanvaara': { lat: 63.15, lng: 28.9667 },
+            'Kuhanvirta': { lat: 63.1667, lng: 29 },
+            'Kuhanvirranmutka': { lat: 63.1667, lng: 29 },
+            'Kuhanvuori': { lat: 63.1667, lng: 28.9667 },
+            'Kuhavaara': { lat: 63.1667, lng: 29 },
+            'Kuhavuori': { lat: 63.1667, lng: 29 },
+            'Kuhela': { lat: 61.3333, lng: 22.5667 },
+            'Kuhelahti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhela-Vaskila': { lat: 61.3333, lng: 22.5667 },
+            'Kuhemetsä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhenperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhensaari': { lat: 61.3333, lng: 22.5667 },
+            'Kuhenvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhensalmi': { lat: 61.3333, lng: 22.5667 },
+            'Kuhepakanperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuheta': { lat: 61.3333, lng: 22.5667 },
+            'Kuhetilä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhetinmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhettajanmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhia': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiala': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiainen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiainnokka': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiainpalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiainsalmi': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiainvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiak': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiakoski': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiaksenperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiaksenpalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiaksentausta': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiala': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialahti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialainmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialainen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialaisenmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialaisenpalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialaisenperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialaisentausta': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialalla': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialallinen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialanmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialanselkä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialanvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialaselkä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialatalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialavaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhialavirta': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiala Väkiluku': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiamäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiamäkinvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiamäkivaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhianmetsä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhianpalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhianperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiansaari': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiansalmi': { lat: 61.3333, lng: 22.5667 },
+            'Kuhianselkä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiansuonperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiantausta': { lat: 61.3333, lng: 22.5667 },
+            'Kuhianvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhianvirta': { lat: 61.3333, lng: 22.5667 },
+            'Kuhianvuori': { lat: 61.3333, lng: 22.5667 },
+            'Kuhio': { lat: 61.3333, lng: 22.5667 },
+            'Kuhio-Vaskila': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolahti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiola': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolahti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolainen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolaininmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolanmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolansalmi': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolanselkä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolanvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolasuonperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolatalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolavirta': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolmetsä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhio-metsä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolninmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolpalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolsaari': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolsalmi': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolselkä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolsuonperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhioltalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolten': { lat: 61.3333, lng: 22.5667 },
+            'Kuhioltti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolvirta': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiolvuori': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaalainen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaalahti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaalaisenmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaalaisenpalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaalaisen perä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaalaisenvuori': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaaliinperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaalvuori': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomaa Väkiluku': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhiomäkivaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmaa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmaalahti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmaalainen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmaanmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmaanpalo': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmaanperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmaanselkä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmaanvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmää': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsän kylä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäinmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäinperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäinvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäkylä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälainen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälaikko': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäläinen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälähde': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälähti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälähtyvä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäläinen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäläisennokka': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäläisenperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälaisenvuori': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäläistenperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäläistenvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälle': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälleen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälehde': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälehti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleine': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleinahde': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleina': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleinahde': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleinahti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleimahti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleimannokka': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleimari': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleimariniemi': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleimen': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleimenselkä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleiksi': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleiksi': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleikso': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleimi': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleimu': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälein': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleira': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleita': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleiti': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitimaa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitimäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitio': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitus': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleititie': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitola': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitomaa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitonmäki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitonperä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitonsaari': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitonvaara': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitonvirta': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitossa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleittikki': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleittyä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleityä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsäleitys': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejä': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaat': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaat': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkain': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkain': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkain': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaina': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaina': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaina': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisilla': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisilla': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisilla': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisilla': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisille': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisille': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisille': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisille': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisilla': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisilla': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisissa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisissa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisissa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisissa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhionmetsälejakkaisissa': { lat: 61.3333, lng: 22.5667 },
+            'Kuhio': { lat: 61.3, lng: 22.5667 },
+            'Kuhmo': { lat: 63.985, lng: 28.9547 },
+            'Kuopio': { lat: 62.8921, lng: 27.6767 },
+            'Kuortanekylä': { lat: 62.5667, lng: 22.95 },
+            'Kuortane': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneiset': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneainen': { lat: 62.5667, lng: 22.95 },
+            'Kuortanelainen': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekylä': { lat: 62.5667, lng: 22.95 },
+            'Kuortanelaisten': { lat: 62.5667, lng: 22.95 },
+            'Kuortanelaiset': { lat: 62.5667, lng: 22.95 },
+            'Kuortanelaisten': { lat: 62.5667, lng: 22.95 },
+            'Kuortanella': { lat: 62.5667, lng: 22.95 },
+            'Kuortanemaa': { lat: 62.5667, lng: 22.95 },
+            'Kuortanemaan': { lat: 62.5667, lng: 22.95 },
+            'Kuortanemaalainen': { lat: 62.5667, lng: 22.95 },
+            'Kuortanemaalaiset': { lat: 62.5667, lng: 22.95 },
+            'Kuortanemaanmies': { lat: 62.5667, lng: 22.95 },
+            'Kuortanemies': { lat: 62.5667, lng: 22.95 },
+            'Kuortanemiehille': { lat: 62.5667, lng: 22.95 },
+            'Kuortanemies': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-Keuruu': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-oppilaitos': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-Seinäjoki': { lat: 62.5667, lng: 22.95 },
+            'Kuortanemetsä': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneselkä': { lat: 62.5667, lng: 22.95 },
+            'Kuortanevirta': { lat: 62.5667, lng: 22.95 },
+            'Kuortanevuori': { lat: 62.5667, lng: 22.95 },
+            'Kuortanelahti': { lat: 62.5667, lng: 22.95 },
+            'Kuortanepuisto': { lat: 62.5667, lng: 22.95 },
+            'Kuortanetuuli': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekunto': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekoto': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekoti': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekotiseutu': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-oppilaitoskoulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-koulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekoulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuri': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuurikeskus': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuri-keskus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-kulttuurikeskus': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuripalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuripalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuri-palvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuri-palvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-kulttuuripalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuri-seura': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuuri-seura': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-kulttuuriseura': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuria': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuria': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuuri': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekulttuuuri': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-opisto': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneopisto': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-oppilaitos': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneoppilaitos': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-koulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekoulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-kenttä': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekenttä': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-areena': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneareena': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-areena': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-stadion': { lat: 62.5667, lng: 22.95 },
+            'Kuortanestadion': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekenttä': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekenttä': { lat: 62.5667, lng: 22.95 },
+            'Kuortanearena': { lat: 62.5667, lng: 22.95 },
+            'Kuortanearena': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-liikuntahalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneliikuntahalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-liikuntakeskus': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneliikuntakeskus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-liikuntapuisto': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneliikuntapuisto': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-liikuntapuisto': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneliikunta puisto': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-uimahalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneuimahalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-uintihalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneuintihalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-uimahalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-uimahalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-uimahalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneuimahalli': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-kirjasto': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekirjasto': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-kirjastoon': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekirjastoon': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-kirjasto': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekirjasto': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-palivelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanepalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-palvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanepalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-palvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanepalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-palvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanepalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-palvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanepalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-sosiaalipalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortanesosiaalipalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-terveyspalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneterveyspalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-opetus': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneopetus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-opetuspalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneopetuspalvelut': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-koulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekoulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-peruskoulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneperuskoulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-yläkoulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneyläkoulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ala-aste': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneala-aste': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-yläaste': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneyläaste': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-lukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortanelukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-lisakoulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortanelisakoulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-sarja-toimistelukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortanesarja-toimistelukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-koulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekoulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-koulutuskeskus': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekoulutuskeskus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-koulutus-keskus': { lat: 62.5667, lng: 22.95 },
+            'Kuortanekoulutus-keskus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-sarja-toimistelukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortanesarja-toimistelukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-sarja-toimistelu-lukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortanesarja-toimistelu-lukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ylioppilas-koulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneylioppila-koulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ylioppilas': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneylioppila': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-opettajankoulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneopettajankoulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ammatillinen': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneammatillinen': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ammatillinen-koulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneammatillinen-koulu': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ammatillinen-oppilaitos': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneammatillinen-oppilaitos': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ammatillinen-opetus': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneammatillinen-opetus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ammatillinen-koulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneammatillinen-koulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ammattiopisto': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneammattiopisto': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ammattilukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneammattilukio': { lat: 62.5667, lng: 22.95 },
+            'Kuortane-ammattikoulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortaneammattikoulutus': { lat: 62.5667, lng: 22.95 },
+            'Kuortane': { lat: 62.5667, lng: 22.95 },
+            'Lappeenranta': { lat: 61.0597, lng: 28.1885 },
+            'Lahti': { lat: 60.9827, lng: 25.6614 },
+            'Liminka': { lat: 64.4397, lng: 26.4656 },
+            'Loimaa': { lat: 60.8333, lng: 23.1667 },
+            'Lohja': { lat: 60.2833, lng: 23.9833 },
+            'Loviisa': { lat: 60.4533, lng: 26.3917 },
+            'Mikkeli': { lat: 61.4158, lng: 27.2733 },
+            'Mäntsälä': { lat: 60.6358, lng: 25.4217 },
+            'Nokia': { lat: 61.4928, lng: 23.4886 },
+            'Nurmijärvi': { lat: 60.5167, lng: 24.8667 },
+            'Orimattila': { lat: 60.6167, lng: 25.6833 },
+            'Oulu': { lat: 64.2008, lng: 27.7261 },
+            'Outokumpu': { lat: 62.7176, lng: 29.0094 },
+            'Paimio': { lat: 60.3833, lng: 21.7833 },
+            'Pori': { lat: 61.5061, lng: 21.7897 },
+            'Pyhäjoki': { lat: 64.3956, lng: 24.1142 },
+            'Pyhäjärvi': { lat: 63.6292, lng: 25.5456 },
+            'Raisio': { lat: 60.5228, lng: 21.7661 },
+            'Rauma': { lat: 61.1267, lng: 21.4983 },
+            'Rovaniemi': { lat: 66.5039, lng: 25.7482 },
+            'Saarijärvi': { lat: 62.4833, lng: 24.9833 },
+            'Salo': { lat: 60.3833, lng: 23.1167 },
+            'Seinäjoki': { lat: 62.7843, lng: 22.8467 },
+            'Sipoo': { lat: 60.3667, lng: 25.3333 },
+            'Tampere': { lat: 61.4991, lng: 23.7871 },
+            'Turku': { lat: 60.4518, lng: 22.2666 },
+            'Tuusula': { lat: 60.4042, lng: 25.2167 },
+            'Utajärvi': { lat: 63.85, lng: 25.9333 },
+            'Vaala': { lat: 63.4833, lng: 26.3 },
+            'Vaasa': { lat: 63.0961, lng: 21.5938 },
+            'Valkeakoski': { lat: 60.9667, lng: 24.0833 },
+            'Vantaa': { lat: 60.2969, lng: 25.0449 },
+            'Varkaus': { lat: 62.5908, lng: 27.8717 },
+            'Vihti': { lat: 60.3882, lng: 24.4891 },
+            'Jyväskylä': { lat: 62.2411, lng: 25.7482 },
+            'Kankaanpää': { lat: 61.7928, lng: 21.9019 },
+            'Kerava': { lat: 60.4042, lng: 25.1167 },
+            'Heinola': { lat: 61.1967, lng: 26.0308 },
+            'Kokemäki': { lat: 61.3711, lng: 22.1894 },
+            'Kuhmo': { lat: 63.985, lng: 28.9547 },
+            'Ii': { lat: 64.9833, lng: 27.2833 },
+            'Pieksämäki': { lat: 62.3131, lng: 26.9614 },
+            'Kitee': { lat: 62.0942, lng: 29.1892 },
+            'Hämeenlinna': { lat: 60.9956, lng: 24.7614 }
+        };
+
+        let allProjects = [];
+        let markersGroup = L.featureGroup();
+        
+        const map = L.map('map').setView([63.5, 26], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        const themeColors = {
+            'Datakeskus': '#667eea',
+            'Tuulivoima': '#43e97b',
+            'Aurinkovoima': '#f8b500',
+            'Ydinvoima': '#ff6b6b',
+            'Bioenergia': '#2ecc71',
+            'Vesivoimala': '#3498db',
+            'Varastointi': '#9b59b6',
+            'Muu': '#95a5a6'
+        };
+
+        function getThemeColor(theme) {
+            return themeColors[theme] || themeColors['Muu'];
+        }
+
+        function getCompletionPercentage(vaihe) {
+            const stages = {
+                '1. Suunnittelu': 25,
+                '2. Kehitys': 50,
+                '3. Rakentaminen': 75,
+                '4. Valmis': 100
+            };
+            return stages[vaihe] || 0;
+        }
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                    allProjects = [];
+                    markersGroup.clearLayers();
+
+                    jsonData.forEach(project => {
+                        const coords = cityCoordinates[project.Paikka];
+                        if (coords) {
+                            const completion = getCompletionPercentage(project.Vaihe);
+                            
+                            const projectData = {
+                                ...project,
+                                lat: coords.lat,
+                                lng: coords.lng,
+                                completion: completion
+                            };
+                            allProjects.push(projectData);
+
+                            const color = getThemeColor(project.Teema);
+                            const circle = L.circleMarker([coords.lat, coords.lng], {
+                                radius: 12,
+                                fillColor: color,
+                                color: '#fff',
+                                weight: 2,
+                                opacity: 1,
+                                fillOpacity: 0.8
+                            });
+
+                            const popupContent = `
+                                <div style="font-size: 12px; max-width: 250px;">
+                                    <h3>${project.Paikka}</h3>
+                                    <div><strong>Teema:</strong> ${project.Teema}</div>
+                                    <div><strong>Summa:</strong> ${project['Summa (M€)'] || 0} M€</div>
+                                    <div><strong>Vaihe:</strong> ${project.Vaihe}</div>
+                                    <div><strong>Kapasiteetti:</strong> ${project['Kapasiteetti (MW)'] || 0} MW</div>
+                                    <div><strong>Valmistuminen:</strong> ${project.Valmistuminen || 'N/A'}</div>
+                                    ${project.Linkki ? `<div><a href="${project.Linkki}" target="_blank">Lisätiedot</a></div>` : ''}
+                                </div>
+                            `;
+                            circle.bindPopup(popupContent);
+                            markersGroup.addLayer(circle);
+                        }
+                    });
+
+                    map.addLayer(markersGroup);
+                    updateStats();
+                    updateProjectsList();
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Virhe tiedoston käsittelyssä');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function updateStats() {
+            const totalInvestment = allProjects.reduce((sum, p) => sum + (parseFloat(p['Summa (M€)']) || 0), 0);
+            const totalCapacity = allProjects.reduce((sum, p) => sum + (parseFloat(p['Kapasiteetti (MW)']) || 0), 0);
+            const avgCompletion = allProjects.reduce((sum, p) => sum + p.completion, 0) / Math.max(allProjects.length, 1);
+
+            document.getElementById('totalInvestment').textContent = totalInvestment.toFixed(0);
+            document.getElementById('totalProjects').textContent = allProjects.length;
+            document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(0);
+            document.getElementById('completionRate').textContent = Math.round(avgCompletion) + '%';
+        }
+
+        function updateProjectsList() {
+            const projectsList = document.getElementById('projectsList');
+            projectsList.innerHTML = '';
+
+            allProjects.sort((a, b) => (parseFloat(b['Summa (M€)']) || 0) - (parseFloat(a['Summa (M€)']) || 0));
+
+            allProjects.forEach(project => {
+                const projectItem = document.createElement('div');
+                projectItem.className = 'project-item';
+                projectItem.style.borderLeftColor = getThemeColor(project.Teema);
+                projectItem.innerHTML = `
+                    <div class="project-title">${project.Paikka}</div>
+                    <div class="project-info">
+                        <div>📌 ${project.Teema}</div>
+                        <div>💰 ${project['Summa (M€)'] || 0} M€</div>
+                        <div>⚡ ${project['Kapasiteetti (MW)'] || 0} MW</div>
+                        <div>📊 ${project.Vaihe}</div>
+                    </div>
+                `;
+                projectsList.appendChild(projectItem);
+            });
+        }
+    </script>
+</body>
+</html>
