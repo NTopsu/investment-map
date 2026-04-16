@@ -487,21 +487,91 @@
             markersGroup.addLayer(marker);
         }
 
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+       document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                try {
-                    const data = new Uint8Array(event.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        try {
+            const data = new Uint8Array(event.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-                    console.log('Excel-data ladattu:', jsonData);
+            console.log('Excel-data ladattu:', jsonData);
+            console.log('Hankkeiden määrä excelissä:', jsonData.length);
 
-                    allProjects = [];
+            // TYHJENNÄ KAIKKI VANHA
+            allProjects = [];
+            locationGroups = {};
+            
+            // Poista markit kartalta
+            if (map.hasLayer(markersGroup)) {
+                map.removeLayer(markersGroup);
+            }
+            markersGroup = L.featureGroup();
+            
+            // Tyhjennä sidebar
+            document.getElementById('projectsList').innerHTML = '';
+            document.getElementById('phase0Count').textContent = '0';
+            document.getElementById('phase0Capacity').textContent = '0';
+            document.getElementById('phase1Count').textContent = '0';
+            document.getElementById('phase1Capacity').textContent = '0';
+            document.getElementById('phase2Count').textContent = '0';
+            document.getElementById('phase2Capacity').textContent = '0';
+            document.getElementById('phase3Count').textContent = '0';
+            document.getElementById('phase3Capacity').textContent = '0';
+            document.getElementById('totalInvestment').textContent = '0';
+            document.getElementById('totalProjects').textContent = '0';
+            document.getElementById('totalCapacity').textContent = '0';
+            document.getElementById('completionRate').textContent = '0%';
+
+            // LATAA UUDET HANKKEET
+            jsonData.forEach(project => {
+                const coords = cityCoordinates[project.Paikka];
+                if (coords) {
+                    const projectData = {
+                        ...project,
+                        lat: coords.lat,
+                        lng: coords.lng
+                    };
+                    allProjects.push(projectData);
+
+                    const key = coords.lat + '-' + coords.lng;
+                    if (!locationGroups[key]) {
+                        locationGroups[key] = { coords, projects: [] };
+                    }
+                    locationGroups[key].projects.push(projectData);
+                }
+            });
+
+            console.log('Hankkeet ladattu järjestelmään:', allProjects.length);
+            console.log('Paikalliset ryhmät:', locationGroups);
+
+            // Luodaan merkit
+            for (const key in locationGroups) {
+                const group = locationGroups[key];
+                if (group.projects.length > 1) {
+                    createMultiColorMarker(group.coords.lat, group.coords.lng, group.projects);
+                } else {
+                    const capacity = parseFloat(group.projects[0]['Kapasiteetti (MW)']) || 0;
+                    createSingleMarker(group.projects[0], capacity);
+                }
+            }
+
+            map.addLayer(markersGroup);
+            updateStats();
+            updateProjectsList();
+            
+            console.log('Finaalit projektit:', allProjects.length);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Virhe tiedoston käsittelyssä: ' + error.message);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
                    // Poista vanhat markit kartalta
 if (map.hasLayer(markersGroup)) {
     map.removeLayer(markersGroup);
