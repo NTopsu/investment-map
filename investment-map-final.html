@@ -451,7 +451,8 @@
         }
 
        unction createSingleMarker(project, capacity) {
-    const capacityNum = parseFloat(capacity) || 0;
+    console.log('Project:', project.Paikka, 'Phase:', project.Vaihe, 'Color:', getPhaseColor(project.Vaihe));
+           const capacityNum = parseFloat(capacity) || 0;
     const radius = Math.max(8, Math.min(30, capacityNum / 10));
             const color = getPhaseColor(project.Vaihe);
             
