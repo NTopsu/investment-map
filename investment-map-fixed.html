@@ -505,6 +505,21 @@
                     markersGroup.clearLayers();
                     locationGroups = {};
 
+                    // Tyhjennä vaiheittaiset tilastot
+document.getElementById('phase0Count').textContent = '0';
+document.getElementById('phase0Capacity').textContent = '0';
+document.getElementById('phase1Count').textContent = '0';
+document.getElementById('phase1Capacity').textContent = '0';
+document.getElementById('phase2Count').textContent = '0';
+document.getElementById('phase2Capacity').textContent = '0';
+document.getElementById('phase3Count').textContent = '0';
+document.getElementById('phase3Capacity').textContent = '0';
+document.getElementById('totalInvestment').textContent = '0';
+document.getElementById('totalProjects').textContent = '0';
+document.getElementById('totalCapacity').textContent = '0';
+document.getElementById('completionRate').textContent = '0%';
+document.getElementById('projectsList').innerHTML = '';
+
                     jsonData.forEach(project => {
                         const coords = cityCoordinates[project.Paikka];
                         if (coords) {
