@@ -375,12 +375,16 @@
         };
 
         const phaseColors = {
-            'Keskeytetty': '#808080',
-            'Esiselvitys': '#ff8c00',
-            'Suunnittelu': '#ffff00',
-            'Investointipäätös': '#228B22',
-            'Käynnistys': '#90EE90'
-        };
+    '0. Esiselvitys': '#ff8c00',
+    '1. Suunnittelu': '#ffff00',
+    '2. Investointipäätös': '#228B22',
+    '3. Käynnistys': '#90EE90',
+    'Keskeytetty': '#808080',
+    'Esiselvitys': '#ff8c00',
+    'Suunnittelu': '#ffff00',
+    'Investointipäätös': '#228B22',
+    'Käynnistys': '#90EE90'
+};
 
         let allProjects = [];
         let markersGroup = L.featureGroup();
@@ -446,8 +450,9 @@
             markersGroup.addLayer(marker);
         }
 
-        function createSingleMarker(project, capacity) {
-            const radius = Math.max(8, Math.min(30, capacity / 5));
+       unction createSingleMarker(project, capacity) {
+    const capacityNum = parseFloat(capacity) || 0;
+    const radius = Math.max(8, Math.min(30, capacityNum / 10));
             const color = getPhaseColor(project.Vaihe);
             
             const circle = L.circleMarker([project.lat, project.lng], {
