@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investment Map Application</title>
+    <style>
+        /* Map container styling */
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // Sample project data
+        const projects = [
+            { name: 'Project A', phase: 'Keskeytetty', lat: 60.1695, lon: 24.9354, capacity: 100 },
+            { name: 'Project B', phase: 'Esiselvitys', lat: 60.1695, lon: 24.9354, capacity: 50 },
+            { name: 'Project C', phase: 'Suunnittelu', lat: 60.1715, lon: 24.9354, capacity: 200 },
+            { name: 'Project D', phase: 'Investointipäätös', lat: 60.1725, lon: 24.9374, capacity: 150 },
+            { name: 'Project E', phase: 'Käynnistys', lat: 60.1735, lon: 24.9384, capacity: 75 }
+        ];
+
+        const phaseColors = {
+            'Keskeytetty': 'gray',
+            'Esiselvitys': 'orange',
+            'Suunnittelu': 'yellow',
+            'Investointipäätös': 'darkgreen',
+            'Käynnistys': 'lightgreen'
+        };
+
+        const map = L.map('map').setView([60.1695, 24.9354], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        function addMarker(project) {
+            let color = phaseColors[project.phase];
+            let markerSize = project.capacity / 10; // Adjust size scale as needed
+
+            // Create the marker with a circle
+            L.circleMarker([project.lat, project.lon], {
+                radius: markerSize,
+                fillColor: color,
+                color: color,
+                fillOpacity: 0.7,
+                stroke: true,
+                weight: 1.5
+            }).addTo(map)
+                .bindPopup(project.name + ' - Phase: ' + project.phase + '\nCapacity: ' + project.capacity);
+        }
+
+        // Group projects by location for pie-chart markers
+        const projectGroups = {};
+        projects.forEach(project => {
+            const key = project.lat + '-' + project.lon;
+            if (!projectGroups[key]) projectGroups[key] = [];
+            projectGroups[key].push(project);
+        });
+
+        // Add markers for all projects
+        for (const key in projectGroups) {
+            const group = projectGroups[key];
+            if (group.length > 1) {
+                // Pie-chart style marker for multiple projects
+                let pieChartData = group.map(p => ({ label: p.phase, value: p.capacity }));
+                let totalCapacity = group.reduce((acc, p) => acc + p.capacity, 0);
+                let pieColors = group.map(p => phaseColors[p.phase]);
+
+                L.circleMarker([group[0].lat, group[0].lon], {
+                    radius: 10, // Fixed size for pie-chart marker
+                    fillColor: 'white',
+                    color: 'black',
+                    fillOpacity: 0.5
+                }).addTo(map)
+                    .bindPopup(`Estimated Total Capacity: ${totalCapacity}\nProjects: ${group.length}`);
+            } else {
+                // Single project marker
+                addMarker(group[0]);
+            }
+        }
+
+        // Initialize all markers
+        group.forEach(project => addMarker(project));
+    </script>
+</body>
+</html>
