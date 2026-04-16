@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suomen Investointikartta</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            display: flex;
+            flex: 1;
+            gap: 20px;
+            padding: 20px;
+            overflow: hidden;
+        }
+        
+        #map {
+            flex: 1;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            overflow-y: auto;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        
+        .stat-card .value {
+            font-size: 22px;
+            font-weight: bold;
+        }
+        
+        .cities-list h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .city-item {
+            background: #f9f9f9;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 4px solid #667eea;
+        }
+        
+        .city-item:hover {
+            background: #efefef;
+            transform: translateX(5px);
+        }
+        
+        .city-item.active {
+            background: #e8eaf6;
+            border-left-color: #764ba2;
+        }
+        
+        .city-name {
+            font-weight: bold;
+            color: #333;
+            font-size: 13px;
+        }
+        
+        .city-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .tooltip-custom {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            border-left: 4px solid #667eea;
+        }
+        
+        .tooltip-custom h3 {
+            margin: 0 0 8px 0;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin: 4px 0;
+            color: #666;
+        }
+        
+        .tooltip-row strong {
+            color: #333;
+            margin-right: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            .content {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                max-height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🇫🇮 Suomen Investointikartta</h1>
+            <p>Interaktiivinen visualisointi kaupunkikohtaisista investoinneista</p>
+        </div>
+        
+        <div class="content">
+            <div id="map"></div>
+            <div class="sidebar">
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Kokonaisinvestoinnit</h3>
+                        <div class="value" id="totalInvestment">0</div>
+                        <div style="font-size: 11px;">M€</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Hankkeet</h3>
+                        <div class="value" id="totalProjects">0</div>
+                    </div>
+                </div>
+                <div class="cities-list">
+                    <h2>Paikkakunnat</h2>
+                    <div id="citiesList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Investointitiedot
+        const investmentData = [
+            { name: 'Kouvola', lat: 60.8831, lng: 26.7045, investment: 5000.0, capacity: 1063, projects: 6 },
+            { name: 'Forssa', lat: 60.8116, lng: 23.6242, investment: 4500.0, capacity: 450, projects: 1 },
+            { name: 'Lappeenranta', lat: 61.0597, lng: 28.1885, investment: 3100.0, capacity: 314, projects: 3 },
+            { name: 'Kajaani', lat: 64.2258, lng: 27.7306, investment: 2200.0, capacity: 583, projects: 4 },
+            { name: 'Mikkeli', lat: 61.4158, lng: 27.2733, investment: 2010.0, capacity: 312, projects: 5 },
+            { name: 'Vihti', lat: 60.3882, lng: 24.4891, investment: 1900.0, capacity: 265, projects: 1 },
+            { name: 'Pori', lat: 61.5061, lng: 21.7897, investment: 1750.0, capacity: 400, projects: 2 },
+            { name: 'Raisio', lat: 60.5228, lng: 21.7661, investment: 1500.0, capacity: 250, projects: 1 },
+            { name: 'Lahti', lat: 60.9827, lng: 25.6614, investment: 1001.2, capacity: 228, projects: 2 },
+            { name: 'Hamina', lat: 60.5683, lng: 27.1985, investment: 1000.0, capacity: 160, projects: 2 },
+            { name: 'Rovaniemi', lat: 66.5039, lng: 25.7482, investment: 1000.0, capacity: 500, projects: 1 },
+            { name: 'Kuopio', lat: 62.8921, lng: 27.6767, investment: 1000.0, capacity: 250, projects: 1 },
+            { name: 'Kemi', lat: 65.6700, lng: 24.5667, investment: 700.0, capacity: 75, projects: 2 },
+            { name: 'Utajärvi', lat: 63.8500, lng: 25.9333, investment: 700.0, capacity: 100, projects: 1 },
+            { name: 'Mäntsälä', lat: 60.6358, lng: 25.4217, investment: 500.0, capacity: 220, projects: 4 },
+            { name: 'Vaala', lat: 63.4833, lng: 26.3000, investment: 500.0, capacity: 60, projects: 1 },
+            { name: 'Espoo', lat: 60.2048, lng: 24.6551, investment: 400.0, capacity: 316, projects: 5 },
+            { name: 'Loviisa', lat: 60.4533, lng: 26.3917, investment: 400.0, capacity: 150, projects: 2 },
+            { name: 'Seinäjoki', lat: 62.7843, lng: 22.8467, investment: 100.0, capacity: 80, projects: 1 },
+            { name: 'Isojoki', lat: 61.9167, lng: 21.4167, investment: 100.0, capacity: 82, projects: 2 },
+            { name: 'Kemijärvi', lat: 65.7667, lng: 27.4333, investment: 5.0, capacity: 7, projects: 2 },
+            { name: 'Outokumpu', lat: 62.7176, lng: 29.0094, investment: 2.5, capacity: 4, projects: 1 },
+            { name: 'Loimaa', lat: 60.8333, lng: 23.1667, investment: 2.0, capacity: 5, projects: 1 },
+            { name: 'Järvenpää', lat: 60.4667, lng: 25.1167, investment: 1.2, capacity: 0, projects: 1 },
+            { name: 'Kirkkonummi', lat: 60.3667, lng: 24.4333, investment: 0.0, capacity: 150, projects: 1 },
+            { name: 'Lohja', lat: 60.2833, lng: 23.9833, investment: 0.0, capacity: 75, projects: 1 },
+            { name: 'Orimattila', lat: 60.6167, lng: 25.6833, investment: 0.0, capacity: 30, projects: 1 },
+            { name: 'Rauma', lat: 61.1267, lng: 21.4983, investment: 0.0, capacity: 50, projects: 1 },
+            { name: 'Kerava', lat: 60.4042, lng: 25.1167, investment: 0.0, capacity: 50, projects: 1 },
+            { name: 'Akaa', lat: 61.0667, lng: 23.8333, investment: 0.0, capacity: 130, projects: 2 },
+            { name: 'Sipoo', lat: 60.3667, lng: 25.3333, investment: 0.0, capacity: 105, projects: 2 },
+            { name: 'Jyväskylä', lat: 62.2411, lng: 25.7482, investment: 0.0, capacity: 100, projects: 1 },
+            { name: 'Kankaanpää', lat: 61.7928, lng: 21.9019, investment: 0.0, capacity: 5, projects: 2 },
+            { name: 'Pyhäjoki', lat: 64.3956, lng: 24.1142, investment: 0.0, capacity: 390, projects: 1 },
+            { name: 'Pieksämäki', lat: 62.3131, lng: 26.9614, investment: 0.0, capacity: 60, projects: 1 },
+            { name: 'Kuhmo', lat: 63.9850, lng: 28.9547, investment: 0.0, capacity: 40, projects: 1 },
+            { name: 'Vantaa', lat: 60.2969, lng: 25.0449, investment: 0.0, capacity: 135, projects: 2 },
+            { name: 'Kokemäki', lat: 61.3711, lng: 22.1894, investment: 0.0, capacity: 100, projects: 1 },
+            { name: 'Kristiinankaupunki', lat: 62.2681, lng: 21.4294, investment: 0.0, capacity: 300, projects: 1 },
+            { name: 'Oulu', lat: 64.2008, lng: 27.7261, investment: 0.0, capacity: 70, projects: 2 },
+            { name: 'Merikarvia', lat: 61.7228, lng: 21.3564, investment: 0.0, capacity: 2, projects: 1 },
+            { name: 'Nokia', lat: 61.4928, lng: 23.4886, investment: 0.0, capacity: 30, projects: 1 },
+            { name: 'Salo', lat: 60.3833, lng: 23.1167, investment: 0.0, capacity: 30, projects: 1 },
+            { name: 'Heinola', lat: 61.1967, lng: 26.0308, investment: 0.0, capacity: 40, projects: 1 },
+            { name: 'Varkaus', lat: 62.5908, lng: 27.8717, investment: 0.0, capacity: 100, projects: 1 },
+            { name: 'Pyhäjärvi', lat: 63.6292, lng: 25.5456, investment: 0.0, capacity: 160, projects: 2 },
+            { name: 'Keuruu', lat: 62.2942, lng: 25.3025, investment: 0.0, capacity: 100, projects: 1 },
+            { name: 'Liminka', lat: 64.4397, lng: 26.4656, investment: 0.0, capacity: 30, projects: 1 },
+            { name: 'Kitee', lat: 62.0942, lng: 29.1892, investment: 0.0, capacity: 80, projects: 1 },
+            { name: 'Hämeenlinna', lat: 60.9956, lng: 24.7614, investment: 0.0, capacity: 120, projects: 1 },
+            { name: 'Ii', lat: 64.9833, lng: 27.2833, investment: 0.0, capacity: 300, projects: 1 },
+            { name: 'Tuusula', lat: 60.4042, lng: 25.2167, investment: 0.0, capacity: 100, projects: 1 },
+            { name: 'Vaasa', lat: 63.0961, lng: 21.5938, investment: 0.0, capacity: 200, projects: 1 },
+            { name: 'Nurmijärvi', lat: 60.5167, lng: 24.8667, investment: 0.0, capacity: 560, projects: 1 },
+            { name: 'Paimio', lat: 60.3833, lng: 21.7833, investment: 0.0, capacity: 3, projects: 1 },
+            { name: 'Juva', lat: 61.8333, lng: 27.7667, investment: 0.0, capacity: 30, projects: 1 },
+            { name: 'Keminmaa', lat: 65.6917, lng: 24.5500, investment: 0.0, capacity: 100, projects: 1 },
+            { name: 'Ilmajoki', lat: 62.7167, lng: 22.5667, investment: 0.0, capacity: 40, projects: 1 },
+            { name: 'Valkeakoski', lat: 60.9667, lng: 24.0833, investment: 0.0, capacity: 2, projects: 1 },
+            { name: 'Saarijärvi', lat: 62.4833, lng: 24.9833, investment: 0.0, capacity: 2, projects: 1 },
+            { name: 'Pornainen', lat: 60.3833, lng: 25.7667, investment: 0.0, capacity: 80, projects: 1 },
+            { name: 'Huittinen', lat: 61.1833, lng: 22.6333, investment: 0.0, capacity: 100, projects: 1 },
+            { name: 'Eurajoki', lat: 61.0917, lng: 21.4197, investment: 0.0, capacity: 120, projects: 1 }
+        ];
+
+        // Luo kartta
+        const map = L.map('map').setView([63.5, 26], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Värit investointien määrän perusteella
+        function getColor(investment) {
+            if (investment >= 4000) return '#764ba2';
+            if (investment >= 2000) return '#667eea';
+            if (investment >= 1000) return '#4facfe';
+            if (investment >= 500) return '#00f2fe';
+            if (investment >= 100) return '#43e97b';
+            return '#90ee90';
+        }
+
+        // Markkerin koko
+        function getRadius(investment) {
+            if (investment === 0) return 8;
+            return Math.log(investment) * 3;
+        }
+
+        // Lisää markkeri jokaiselle kaupungille
+        const markers = [];
+        investmentData.forEach(city => {
+            const circle = L.circleMarker([city.lat, city.lng], {
+                radius: getRadius(city.investment),
+                fillColor: getColor(city.investment),
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).addTo(map);
+
+            const tooltipContent = `
+                <div class="tooltip-custom">
+                    <h3>${city.name}</h3>
+                    <div class="tooltip-row">
+                        <strong>Investoinnit:</strong> ${city.investment.toFixed(1)} M€
+                    </div>
+                    <div class="tooltip-row">
+                        <strong>Kapasiteetti:</strong> ${city.capacity} MW
+                    </div>
+                    <div class="tooltip-row">
+                        <strong>Hankkeet:</strong> ${city.projects} kpl
+                    </div>
+                </div>
+            `;
+
+            circle.bindPopup(tooltipContent);
+            circle.on('mouseover', function() {
+                this.openPopup();
+            });
+            circle.on('mouseout', function() {
+                this.closePopup();
+            });
+
+            markers.push({ circle, city });
+        });
+
+        // Laske yhteissummat
+        const totalInvestment = investmentData.reduce((sum, city) => sum + city.investment, 0);
+        const totalProjects = investmentData.reduce((sum, city) => sum + city.projects, 0);
+
+        document.getElementById('totalInvestment').textContent = totalInvestment.toFixed(0);
+        document.getElementById('totalProjects').textContent = totalProjects;
+
+        // Listaa kaupungit sivupalkissa
+        const citiesList = document.getElementById('citiesList');
+        const sortedCities = [...investmentData].sort((a, b) => b.investment - a.investment);
+
+        sortedCities.forEach((city, index) => {
+            const cityItem = document.createElement('div');
+            cityItem.className = 'city-item';
+            cityItem.innerHTML = `
+                <div class="city-name">${city.name}</div>
+                <div class="city-info">
+                    💰 ${city.investment.toFixed(1)} M€ | ⚡ ${city.capacity} MW | 📊 ${city.projects} hanketta
+                </div>
+            `;
+
+            cityItem.addEventListener('click', () => {
+                // Etsi marker ja avaa popup
+                const marker = markers.find(m => m.city.name === city.name);
+                if (marker) {
+                    map.setView([marker.city.lat, marker.city.lng], 8);
+                    marker.circle.openPopup();
+                }
+            });
+
+            citiesList.appendChild(cityItem);
+        });
+    </script>
+</body>
+</html>
