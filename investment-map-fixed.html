@@ -200,9 +200,9 @@
         <div class="content">
             <div id="map"></div>
             <div class="sidebar">
-                <div class="stats">
-                    <div class="stat-card">
-                        <h3>Kokonaisinvestoinnit</h3>
+               <div class="stats">
+    <div class="stat-card">
+        <h3>Kokonaisinvestoinnit</h3>
                         <div class="value" id="totalInvestment">0</div>
                         <div style="font-size: 10px;">M€</div>
                     </div>
@@ -220,6 +220,19 @@
                         <div style="font-size: 10px;">MW</div>
                     </div>
                 </div>
+                
+                <div class="phase-legend">
+                    <h3>📊 Hankkeet vaiheittain</h3>
+                    <div style="font-size: 12px; line-height: 1.8;">
+                        <div><strong>0. Esiselvitys:</strong> <span id="phase0Count">0</span> kpl, <span id="phase0Capacity">0</span> MW</div>
+                        <div><strong>1. Suunnittelu:</strong> <span id="phase1Count">0</span> kpl, <span id="phase1Capacity">0</span> MW</div>
+                        <div><strong>2. Investointipäätös:</strong> <span id="phase2Count">0</span> kpl, <span id="phase2Capacity">0</span> MW</div>
+                        <div><strong>3. Käynnistys:</strong> <span id="phase3Count">0</span> kpl, <span id="phase3Capacity">0</span> MW</div>
+                    </div>
+                </div>
+
+                <div class="phase-legend">
+                    <h3>📍 Vaiheet</h3>
                 
                 <div class="phase-legend">
                     <h3>📍 Vaiheet</h3>
@@ -534,28 +547,49 @@
             reader.readAsArrayBuffer(file);
         });
 
-        function updateStats() {
-            const totalInvestment = allProjects.reduce((sum, p) => sum + (parseFloat(p['Summa (M€)']) || 0), 0);
-            const totalCapacity = allProjects.reduce((sum, p) => sum + (parseFloat(p['Kapasiteetti (MW)']) || 0), 0);
-            
-            const phaseValues = {
-                '0. Esiselvitys': 25,
-                '1. Suunnittelu': 50,
-                '2. Investointipäätös': 75,
-                '3. Käynnistys': 100
-            };
-            
-            let avgCompletion = 0;
-            allProjects.forEach(p => {
-                avgCompletion += (phaseValues[p.Vaihe] || 0);
-            });
-            avgCompletion = allProjects.length > 0 ? avgCompletion / allProjects.length : 0;
-
-            document.getElementById('totalInvestment').textContent = totalInvestment.toFixed(0);
-            document.getElementById('totalProjects').textContent = allProjects.length;
-            document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(0);
-            document.getElementById('completionRate').textContent = Math.round(avgCompletion) + '%';
+       function updateStats() {
+    const totalInvestment = allProjects.reduce((sum, p) => sum + (parseFloat(p['Summa (M€)']) || 0), 0);
+    const totalCapacity = allProjects.reduce((sum, p) => sum + (parseFloat(p['Kapasiteetti (MW)']) || 0), 0);
+    
+    // Laske hankkeet vaiheittain
+    const phaseStats = {
+        '0. Esiselvitys': { count: 0, capacity: 0 },
+        '1. Suunnittelu': { count: 0, capacity: 0 },
+        '2. Investointipäätös': { count: 0, capacity: 0 },
+        '3. Käynnistys': { count: 0, capacity: 0 }
+    };
+    
+    allProjects.forEach(p => {
+        const phase = p.Vaihe;
+        if (phaseStats[phase]) {
+            phaseStats[phase].count += 1;
+            phaseStats[phase].capacity += parseFloat(p['Kapasiteetti (MW)']) || 0;
         }
+    });
+    
+    // Laske valmistumisprosentti: (Investointipäätös + Käynnistys) / kaikki hankkeet
+    const completedProjects = phaseStats['2. Investointipäätös'].count + phaseStats['3. Käynnistys'].count;
+    const completionPercentage = allProjects.length > 0 ? (completedProjects / allProjects.length) * 100 : 0;
+
+    // Päivitä näytöllä olevat arvot
+    document.getElementById('totalInvestment').textContent = totalInvestment.toFixed(0);
+    document.getElementById('totalProjects').textContent = allProjects.length;
+    document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(0);
+    document.getElementById('completionRate').textContent = Math.round(completionPercentage) + '%';
+    
+    // Päivitä vaiheittaiset tilastot
+    document.getElementById('phase0Count').textContent = phaseStats['0. Esiselvitys'].count;
+    document.getElementById('phase0Capacity').textContent = phaseStats['0. Esiselvitys'].capacity.toFixed(0);
+    
+    document.getElementById('phase1Count').textContent = phaseStats['1. Suunnittelu'].count;
+    document.getElementById('phase1Capacity').textContent = phaseStats['1. Suunnittelu'].capacity.toFixed(0);
+    
+    document.getElementById('phase2Count').textContent = phaseStats['2. Investointipäätös'].count;
+    document.getElementById('phase2Capacity').textContent = phaseStats['2. Investointipäätös'].capacity.toFixed(0);
+    
+    document.getElementById('phase3Count').textContent = phaseStats['3. Käynnistys'].count;
+    document.getElementById('phase3Capacity').textContent = phaseStats['3. Käynnistys'].capacity.toFixed(0);
+}
 
         function updateProjectsList() {
             const projectsList = document.getElementById('projectsList');
