@@ -224,7 +224,7 @@
 
     <script>
         let allProjects = [];
-        let markers = L.markerClusterGroup();
+      let markers = L.featureGroup();
         
         const map = L.map('map').setView([63.5, 26], 5);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -292,7 +292,7 @@
 
                 allProjects = [];
                 map.removeLayer(markers);
-                markers = L.markerClusterGroup();
+                markers = L.featureGroup();
 
                 // Lisää projektit
                 for (const project of jsonData) {
